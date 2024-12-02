@@ -42,6 +42,10 @@ func main() {
 			}
 		}
 
+        if game.totalScore > 1000 {
+            rl.SetTargetFPS(40)
+        }
+
 		rl.BeginDrawing()
 
 		// println(rl.GetTime())
