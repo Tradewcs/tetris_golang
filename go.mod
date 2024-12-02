@@ -1,6 +1,6 @@
 module tetris
 
-go 1.23
+go 1.23.3
 
 require (
 	github.com/ebitengine/purego v0.8.1 // indirect
