@@ -1,8 +1,8 @@
 package main
 
 import (
+	"fmt"
 	"math/rand"
-	"time"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -13,27 +13,24 @@ const (
 	cellSize int32 = 30
 )
 
-var totalScore int32 = 0
-
-var CurrentBlock BlockInterface
-var NextBlock BlockInterface
-
 type Game struct {
 	Grid Grid
 	Blocks []BlockInterface
 	GameOver bool
+	CurrentBlock BlockInterface
+	NextBlock BlockInterface
+  	totalScore int32
 }
-
 
 func (g *Game) Initialize() {
 	g.Grid.Initialize(cellSize, numRows, numCols)
 	g.GameOver = false
 
 	g.Blocks = g.GetAllBlocks()
-	CurrentBlock = g.GetRandomBlock()
-	CurrentBlock.Initialize(cellSize)
-	NextBlock = g.GetRandomBlock()
-	NextBlock.Initialize(cellSize)
+	g.CurrentBlock = g.GetRandomBlock()
+	g.CurrentBlock.Initialize(cellSize)
+	g.NextBlock = g.GetRandomBlock()
+	g.NextBlock.Initialize(cellSize)
 }
 
 
@@ -50,23 +47,117 @@ func (g *Game) GetAllBlocks() []BlockInterface {
 }
 
 func (g *Game) GetRandomBlock() BlockInterface {
-	rand.Seed(time.Now().UnixNano())
 	blocks := g.GetAllBlocks()
 
 	randomIndex := rand.Intn(len(blocks))
 	return blocks[randomIndex]
 }
 
-
-
 func (g *Game) Draw() {
 	g.Grid.Draw()
-	CurrentBlock.Draw()
-	g.Grid.drawScore()
+	g.CurrentBlock.Draw()
+
+	g.drawScore()
+	g.drawNextBlock()
+}
+
+func (g *Game) DoBlinking(rowsToBlink []int) {
+	if len(rowsToBlink) == 0 {
+		return
+	}
+
+	gridCopy := g.Grid.GetGridCopy()
+
+	for i := 0; i < 2; i++ {
+		for i := range rowsToBlink {
+			g.Grid.ClearRow(int32(rowsToBlink[i]))
+		}
+
+		rl.BeginDrawing()
+		g.Grid.Draw()
+		rl.EndDrawing()
+
+		rl.WaitTime(0.2)
+
+		g.Grid.SetGrid(gridCopy)
+		fmt.Print() 														// TODO: Remove
+
+		rl.BeginDrawing()
+		g.Grid.Draw()
+		rl.EndDrawing()
+
+		rl.WaitTime(0.2)
+	}
+}
+
+func (g *Game) drawNextBlock() {
+	const (
+		paddingTop int32 = 20
+		paddingLeft int32 = 3
+
+		boxWidth int32 = 150
+		boxHeight int32 = 120
+
+		positionX int32 = windowWidth - panelWidth / 2 - 65
+		positionY int32 = 160
+
+		fontSize int32 = 20
+	)
+
+	rl.DrawRectangle(positionX, positionY, boxWidth, boxHeight, rl.Black)
+	rl.DrawRectangleLines(positionX, positionY, boxWidth, boxHeight, rl.White)
+
+	rl.DrawText("NEXT", positionX + 40 + paddingLeft, positionY + paddingTop, fontSize, rl.White)
+
+	var offsetX int32 = 7
+	var offsetY int32 = 9
+	g.NextBlock.Move(offsetX, offsetY)
+
+	if b, ok := g.NextBlock.(*IBlock); ok {
+		var x int32 = -10
+		var y int32 = 20
+
+		cells := b.GetCellPositions()
+		for _, square := range cells {
+			rl.DrawRectangle(square.Column * b.cellSize + 1 + x, square.Row * b.cellSize + 1 + y, b.cellSize - 1, b.cellSize - 1, b.colors[b.Id])
+		}
+	} else if b, ok := g.NextBlock.(*OBlock); ok {
+		var x int32 = -15
+		var y int32 = 0
+
+		cells := b.GetCellPositions()
+		for _, square := range cells {
+			rl.DrawRectangle(square.Column * b.cellSize + 1 + x, square.Row * b.cellSize + 1 + y, b.cellSize - 1, b.cellSize - 1, b.colors[b.Id])
+		}
+	} else {
+		g.NextBlock.Draw()
+	}
+
+	g.NextBlock.Move(-offsetX, -offsetY)
+}
+
+func (g *Game) drawScore() {
+	const (
+		paddingTop int32 = 20
+		paddingLeft int32 = 3
+		scoreWidth int32 = 120
+		scoreHeight int32 = 120
+
+		positionX int32 = windowWidth - panelWidth / 2 - 50
+		positionY int32 = 20
+
+		fontSize int32 = 20
+	)
+
+	rl.DrawRectangle(positionX, positionY, scoreWidth, scoreHeight, rl.Black)
+	rl.DrawRectangleLines(positionX, positionY, scoreWidth, scoreHeight, rl.White)
+
+	rl.DrawText("SCORE", positionX + 20 + paddingLeft, positionY + paddingTop, fontSize, rl.White)
+	rl.DrawText(fmt.Sprintf("%0*d", 8, g.totalScore), positionX + 10 + paddingLeft, positionY + 50 + paddingTop, fontSize, rl.White)
 }
 
 func (g *Game) IsBlockOutside() bool {
-	tiles := CurrentBlock.GetCellPositions()
+	tiles := g.CurrentBlock.GetCellPositions()
 	for _, tile := range tiles {
 		if g.Grid.IsCellOutside(tile.Row, tile.Column) {
 			return true
@@ -77,23 +168,26 @@ func (g *Game) IsBlockOutside() bool {
 }
 
 func (g *Game) RotateBlock() {
-	CurrentBlock.Rotate()
+	g.CurrentBlock.Rotate()
 	if g.IsBlockOutside() || !g.BlockFits() {
-		CurrentBlock.RotateUndo()
+		g.CurrentBlock.RotateUndo()
 	}
 }
 
 func (g *Game) LockBlock() {
-	tiles := CurrentBlock.GetCellPositions()
+	tiles := g.CurrentBlock.GetCellPositions()
 	for _, tile := range tiles {
-		g.Grid.grid[tile.Row][tile.Column] = CurrentBlock.GetId()
+		g.Grid.grid[tile.Row][tile.Column] = g.CurrentBlock.GetId()
 	}
 
-	CurrentBlock = NextBlock
-	NextBlock = g.GetRandomBlock()
-	NextBlock.Initialize(cellSize)
+	g.CurrentBlock = g.NextBlock
+	g.NextBlock = g.GetRandomBlock()
+	g.NextBlock.Initialize(cellSize)
 
-	totalScore += g.Grid.ClearFullRows() * 100
+	rowsToClear := g.Grid.GetRowsToClear()
+	g.DoBlinking(rowsToClear)
+
+	g.totalScore += g.Grid.ClearFullRows() * 100
 
 	if !g.BlockFits() {
 		g.GameOver = true
@@ -101,7 +195,7 @@ func (g *Game) LockBlock() {
 }
 
 func (g *Game) BlockFits() bool {
-	tiles := CurrentBlock.GetCellPositions()
+	tiles := g.CurrentBlock.GetCellPositions()
 	for _, tile := range tiles {
 		if !g.Grid.IsCellEmpty(tile.Row, tile.Column) {
 			return false
@@ -133,9 +227,9 @@ func (g *Game) MoveBlockLeft() {
 		return
 	}
 
-	CurrentBlock.Move(0, -1)
+	g.CurrentBlock.Move(0, -1)
 	if g.IsBlockOutside() || !g.BlockFits() {
-		CurrentBlock.Move(0, 1)
+		g.CurrentBlock.Move(0, 1)
 	}
 }
 
@@ -145,9 +239,9 @@ func (g *Game) MoveBlockRight() {
 		return
 	}
 
-	CurrentBlock.Move(0, 1)
+	g.CurrentBlock.Move(0, 1)
 	if g.IsBlockOutside() || !g.BlockFits() {
-		CurrentBlock.Move(0, -1)
+		g.CurrentBlock.Move(0, -1)
 	}
 }
 
@@ -156,9 +250,9 @@ func (g *Game) MoveBlockDown() bool {
 		return false
 	}
 
-	CurrentBlock.Move(1, 0)
+	g.CurrentBlock.Move(1, 0)
 	if g.IsBlockOutside() || !g.BlockFits() {
-		CurrentBlock.Move(-1, 0)
+		g.CurrentBlock.Move(-1, 0)
 		g.LockBlock()
 		return true
 	}

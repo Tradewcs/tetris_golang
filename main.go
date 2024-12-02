@@ -44,7 +44,7 @@ func main() {
 
 		rl.BeginDrawing()
 
-		println(rl.GetTime())
+		// println(rl.GetTime())
 		
 		rl.DrawTexture(bg, 0, 0, LightGrey)
 		rl.DrawRectangle(0, 0, windowWidth - panelWidth, windowHeight, LightGrey)
